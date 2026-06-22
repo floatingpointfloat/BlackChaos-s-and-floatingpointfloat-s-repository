@@ -6,7 +6,7 @@ import random
 
 ti.init(arch=ti.cpu)
 pygame.init()
-WIDTH, HEIGHT = 700, 700
+WIDTH, HEIGHT = 1100, 1100
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 clock = pygame.time.Clock()
 pygame.display.set_caption("Bouncing Ball Simulation")
@@ -102,13 +102,13 @@ class Simulation:
     @ti.kernel
     def update_positions(self, dt: ti.f32):
         for i in range(self.active_bodies[None]):
-            acceleration = ti.Vector([0.0, 200])
+            acceleration = ti.Vector([0.0, 1500])
             self.velocities[i] += acceleration * dt
             self.positions[i] += self.velocities[i] * dt
 
     def physics_step(self, dt):
         self.update_positions(dt)
-        for _ in range(1):  # Multiple iterations for better collision resolution
+        for _ in range(10):  # Multiple iterations for better collision resolution
             self.boundary_collision()
             self.particle_collision()
 
@@ -119,12 +119,17 @@ sim = Simulation()
 class Input:
     def __init__(self):
         self.mouse_down = False
+        self.dragging = False
         self.spawning_mass = 10
+        self.start_pos = np.array([0, 0], dtype=np.float32)
+        self.end_pos = np.array([0, 0], dtype=np.float32)
 
     def handle_events(self):
         keys = pygame.key.get_pressed()
+
         if keys[pygame.K_UP] and self.spawning_mass < 10000:
             self.spawning_mass += 20
+
         if keys[pygame.K_DOWN] and self.spawning_mass > 10:
             self.spawning_mass -= 20
 
@@ -134,19 +139,42 @@ class Input:
             ):
                 pygame.quit()
                 exit()
+
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                self.mouse_down = True
+                self.dragging = True
+                self.start_pos = np.array(
+                    pygame.mouse.get_pos(),
+                    dtype=np.float32,
+                )
+                self.end_pos = self.start_pos.copy()
+
             elif event.type == pygame.MOUSEBUTTONUP:
-                self.mouse_down = False
+                self.dragging = False
+
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_0:
                 sim.clear()
                 self.spawning_mass = 10
 
-        if self.mouse_down:
-            current_mouse_pos = np.array(pygame.mouse.get_pos(), dtype=np.float32)
+        if self.dragging:
+            self.end_pos = np.array(
+                pygame.mouse.get_pos(),
+                dtype=np.float32,
+            )
+
+            velocity = (self.end_pos - self.start_pos) * 5
+
+            direction = self.end_pos - self.start_pos
+            length = np.linalg.norm(direction)
+
+            if length > 0:
+                direction /= length
+                spawn_pos = self.end_pos + direction * 15
+            else:
+                spawn_pos = self.end_pos
+
             sim.add_ball(
-                current_mouse_pos,
-                (0, 0),
+                spawn_pos,
+                velocity,
                 self.spawning_mass,
                 (
                     random.randint(10, 255),
@@ -183,10 +211,21 @@ class Renderer:
                 (int(pos[0]), int(pos[1])),
                 max(1, int(radius)),
             )
+            
+    def render_arrow(self, input_handler):
+        if input_handler.dragging:
+            pygame.draw.line(
+                screen,
+                (255, 0, 0),
+                tuple(input_handler.start_pos.astype(int)),
+                tuple(input_handler.end_pos.astype(int)),
+                3,
+            )
 
     def render(self):
         screen.fill((0, 0, 0))
         self.render_boundary()
+        self.render_arrow(input_handler)
         self.render_balls(sim)
 
 
